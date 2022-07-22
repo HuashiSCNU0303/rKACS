@@ -1,3 +1,6 @@
+Here is the source code of paper *Top-r keyword-based community search in attributed graphs*
+
+
 ### Example of compiling and running (Linux)
 
 Before running, you should prepare the dataset and query files according to the templates, check file names and file paths with the macros in Def.h, install required libraries, and specify the paths in the provided Makefile.
