@@ -38,14 +38,12 @@ void DynamicTCTruss::AddTCTruss(PUNGraph newTCTruss)
 
 void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 {
-	// 在GetMaxKTrussInc()的时候，传出去的T已经添加好了新边了
-
 	int index = maxTCTrusses.size();
 	PUNGraph TCTrussGraph = TUNGraph::New();
 	vector<vector<Edge>> newTCs;
 
+	// do BFS, when traversing to existing edges, stop further traverse
 	unordered_set<int> mergeTCTrusses;
-	// unordered_set<Edge, pair_hash> visited;
 	flat_hash_set<Edge> visited;
 	while (!edges.empty())
 	{
@@ -62,7 +60,6 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 			auto it = TCTrussOfEdge.find(e);
 			if (it != TCTrussOfEdge.end())
 			{
-				// 已经遍历到上一次找到的truss的边了，就停下来
 				mergeTCTrusses.insert(it->second);
 				continue;
 			}
@@ -92,7 +89,7 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 			for (auto w : comNeighbors)
 			{
 				Edge w_v = GetEdge(w, v);
-				if (visited.insert(w_v).second) // 插入成功了，说明原来没有
+				if (visited.insert(w_v).second) 
 				{
 					Q.push(w_v);
 				}
@@ -121,13 +118,11 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 	}
 
 	vector<vector<int>> newTCIndexes;
-	// 借用了一下GetWccs的实现，顺便把排序去掉了
 	typename PUNGraph::TObj::TNodeI NI;
 	int graphSize = TCTrussGraph->GetNodes();
 	THashSet<TInt> VisitedNId(graphSize + 1);
 	TSnapQueue<int> NIdQ(graphSize + 1);
 	vector<int> CcNIdV(1, 0);
-	// zero degree nodes
 	for (NI = TCTrussGraph->BegNI(); NI < TCTrussGraph->EndNI(); NI++)
 	{
 		if (NI.GetDeg() == 0)
@@ -138,7 +133,7 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 			newTCIndexes.push_back(CcNIdV);
 		}
 	}
-	// the rest of the nodes
+
 	for (NI = TCTrussGraph->BegNI(); NI < TCTrussGraph->EndNI(); NI++)
 	{
 		const int NId = NI.GetId();
@@ -172,11 +167,13 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 	int TCTrussSize = maxTCTrusses.size();
 	for (auto& newTC : newTCIndexes)
 	{
-		PUNGraph result = TUNGraph::New();
-		vector<int> newNodes;
+		PUNGraph result = TUNGraph::New(); // T_N
+		vector<int> newNodes; // N
 		vector<vector<int>> preTCTrussNodes;
 		int newTCSize = newTC.size();
 		preTCTrussNodes.reserve(newTCSize);
+		// we do the mapping of new and old triangle-connected k-trusses when dynamically computing the new triangle-connected k-trusses
+		// so we directly obtain the corresponding \mathcal{T}_O
 		for (auto& index : newTC)
 		{
 			if (index < TCTrussSize)
@@ -185,7 +182,6 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 				for (TUNGraph::TEdgeI EI = graph->BegEI(); EI != graph->EndEI(); EI++)
 				{
 					int u = EI.GetSrcNId(), v = EI.GetDstNId();
-					// result->AddEdge2(u, v);
 					result->AddNodeUnchecked(u);
 					result->AddNodeUnchecked(v);
 					result->AddEdgeUnchecked(u, v);
@@ -220,9 +216,7 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 		}
 		AddTCTruss(result);
 
-		// 得到需要计算的点对，oldNodeSet_2可能没用
-		// 注意，这些需要计算的点对可能会比应该有的点对多一些（会有一点点重复），后面在AddEdges()算N_2的时候会处理掉这些重复
-		unordered_set<int> oldNodeSet_1;
+		unordered_set<int> oldNodeSet_1; // O_1
 		unordered_map<int, int> nodeCntMap;
 		for (auto& nodes : preTCTrussNodes)
 		{
@@ -233,7 +227,7 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 			}
 		}
 
-		// 先得到newNodes内部的点对
+		// obtain P(N)
 		int newNodeCnt = newNodes.size();
 		for (int i = 0; i < newNodeCnt; i++)
 		{
@@ -251,7 +245,7 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 			}
 		}
 
-		// 再得到newNodes和已经存在的node之间的点对
+		// obtain {(u, v)|u ∈ N, v ∈ O_1}
 		for (int i = 0; i < newNodeCnt; i++)
 		{
 			int u = newNodes[i];
@@ -268,7 +262,7 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 			}
 		}
 
-		// 再得到已经存在的node之间的点对
+		// obtain P(O_1) \ \mathcal{P}(\mathcal{T}_O)
 		for (auto& oldNodes : preTCTrussNodes)
 		{
 			vector<int> diffNodes;
@@ -285,7 +279,6 @@ void DynamicTCTruss::AddEdges(unordered_set<Edge, pair_hash>& edges)
 				oldNodeSet_2.erase(oldNode);
 			}
 
-			// 取diffNodes和oldNodeSet_2之间的点对
 			for (auto& u : diffNodes)
 			{
 				for (auto& v : oldNodeSet_2)

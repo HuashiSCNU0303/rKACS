@@ -23,10 +23,6 @@ DynamicClique::~DynamicClique()
 	flat_hash_set<int>().swap(resultCliques);
 	flat_hash_set<int>().swap(notEmptyIndex);
 	flat_hash_set<int>().swap(emptyIndex);
-	/*unordered_map<int, set<int>>().swap(cliquesOfNode);
-	unordered_set<int>().swap(resultCliques);
-	unordered_set<int>().swap(notEmptyIndex);
-	unordered_set<int>().swap(emptyIndex);*/
 }
 
 void DynamicClique::AddClique(Clique& clique)
@@ -81,14 +77,14 @@ void DynamicClique::DelClique(int index)
 		cliquesOfNode[node].erase(index);
 	}
 	notEmptyIndex.erase(index);
-	resultCliques.erase(index); // 如果没有的话就不会删，所以不影响。但是还是要删的，不然返回的结果里会有0
+	resultCliques.erase(index); 
 	emptyIndex.insert(index);
 	maxCliques[index].clear();
 }
 
-// 2017ICDE，加入单边的maintain算法，有问题
 void DynamicClique::AddEdge(int u, int v)
 {
+	// directly add a new clique {u, v}
 	if (!G->IsNode(u) || !G->IsNode(v))
 	{
 		G->AddEdge2(u, v);
@@ -107,7 +103,7 @@ void DynamicClique::AddEdge(int u, int v)
 		return;
 	}
 	G->AddEdge(u, v);
-	// u是度数小的，v是度数大的
+	// assume that d(u, G) < d(v, G)
 	if (G->GetNI(u).GetDeg() > G->GetNI(v).GetDeg())
 	{
 		swap(u, v);
@@ -120,9 +116,7 @@ void DynamicClique::AddEdge(int u, int v)
 	{
 		vNbrs.insert(vI.GetNbrNId(i));
 	}
-	// 问题：1236 2346，两个clique∩2678 = 26，也就是说会都加上一个相同的clique 2356
-	// 而且还有一个问题，这里可能会给cliquesOfNode[u]加上新的clique，
-	// 所以可能先复制一个cliquesOfNode[u]，再去循环会好一些
+
 	flat_hash_set<int> cliquesU(cliquesOfNode[u]), cliquesV(cliquesOfNode[v]);
 	flat_hash_set<Clique, clique_hash> candCliques;
 	candCliques.reserve(cliquesU.size());
@@ -141,7 +135,6 @@ void DynamicClique::AddEdge(int u, int v)
 		InsertNode(cand, v);
 		Clique C(clique);
 		InsertNode(C, v);
-		// if (cand.size() == clique.size())
 		if (cand == C)
 		{
 			InsertNode(clique, v);
@@ -150,7 +143,6 @@ void DynamicClique::AddEdge(int u, int v)
 		}
 		else
 		{
-			// InsertNode(cand, v);
 			if (MaxEval(cand, cand, G))
 			{
 				candCliques.emplace(std::move(cand));
@@ -188,7 +180,6 @@ void DynamicClique::AddEdge(int u, int v)
 		InsertNode(cand, u);
 		Clique C(clique);
 		InsertNode(C, u);
-		// if (cand.size() == clique.size())
 		if (cand == C)
 		{
 			DelClique(cliqueIndex);
@@ -214,7 +205,7 @@ vector<Clique> DynamicClique::AddEdges_SInsert(PUNGraph edgesToInsert)
 	return newCliques;
 }
 
-vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
+vector<Clique> DynamicClique::AddEdges_NIEMC(PUNGraph edgesToInsert)
 {
 	vector<pair<int, int>> deg;
 	GetNonAscDeg(edgesToInsert, deg);
@@ -225,8 +216,6 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 		int u = deg_u.second;
 		auto uI = edgesToInsert->GetNI(u);
 		int uDeg = uI.GetDeg();
-		// 边数太少时使用单边算法，如果是Pruning，要考虑(u, nbr)是否已被添加
-		// 暂时不用
 		if (uDeg <= 0)
 		{
 			for (int i = 0; i < uDeg; i++)
@@ -238,7 +227,7 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 		else
 		{
 			flat_hash_set<int> N; // N(u, G)∪N(u, G1)
-			vector<int> newNbrs, N_2;
+			vector<int> newNbrs, N_2; // N_2 is the actual N(u, G1), since |N(u, G) ∩ N(u, G1)| may ≠ 0 here
 			N_2.reserve(uDeg);
 			newNbrs.reserve(uDeg);
 			for (int i = 0; i < uDeg; i++)
@@ -259,7 +248,7 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 
 			if (G->IsNode(u))
 			{
-				flat_hash_set<int> N_1; // N(u, G)
+				flat_hash_set<int> N_1; // N(u, G), not the N_1 in Algorithm 3
 				auto uGI = G->GetNI(u);
 				int uGDeg = uGI.GetDeg();
 				N_1.reserve(uGDeg);
@@ -274,23 +263,21 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 				for (auto nbr : N)
 				{
 					nbrNodes.push_back(nbr);
-					if (N_1.find(nbr) == N_1.end())
+					if (N_1.find(nbr) == N_1.end()) // N_2 = N \ N_1, to get the actual N(u, G1)
 					{
 						N_2.push_back(nbr);
 					}
 				}
 				sort(nbrNodes.begin(), nbrNodes.end());
 				sort(N_2.begin(), N_2.end());
-				nbrGraph = GetSubGraph1(G, nbrNodes, nbrGraph);
+				nbrGraph = GetSubGraph1(G, nbrNodes, nbrGraph); // G[N]
 
-				auto& uCliques = cliquesOfNode.at(u);
+				auto& uCliques = cliquesOfNode.at(u); // the cliques containing u
 				for (auto it = uCliques.begin(); it != uCliques.end(); )
 				{
 					int cliqueIndex = *it;
 					auto& clique = maxCliques[cliqueIndex];
 					DeleteNode(clique, u);
-					// 按道理来说，这里的clique应该不包含N_2中的点，因此这里的clique不会用于下面求交集
-					// 这里的问题是，求最小度数花了很多时间……我不是很理解，到底为啥？
 					if (!MaxEval(clique, N_1, nbrGraph))
 					{
 						DelClique(cliqueIndex);
@@ -324,7 +311,6 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 				N_2 = std::move(nbrNodes);
 			}
 
-			// 若N_2 = {6, 7, 8}，把cliquesToIntersect划分成：有{6, 7, 8}的、有{7，8}的、有{8}的。注意N_2要有序
 			vector<Clique> cliqueDivision;
 			cliqueDivision.reserve(N_2.size());
 			flat_hash_set<int> cliquesToIntersect;
@@ -336,7 +322,7 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 				for (auto it = cliques.begin(); it != cliques.end(); it++)
 				{
 					int index = *it;
-					if (cliquesToIntersect.insert(index).second) // 插入成功了，说明本来没有
+					if (cliquesToIntersect.insert(index).second) 
 					{
 						nCliques.push_back(index);
 					}
@@ -350,7 +336,6 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 			candIndexes.reserve(notEmptyIndex.size());
 			for (auto& cliques : cliqueDivision)
 			{
-				// 标记每个size大小对应的clique
 				unordered_map<int, Clique> cliquesOfSize;
 				for (auto& cliqueIndex : cliques)
 				{
@@ -368,7 +353,6 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 
 					if (intersections.size() == clique.size())
 					{
-						// 可以直接加，删掉旧的C，加上一个新的C∪{u}
 						InsertNode(clique, u);
 						cliquesOfNode[u].insert(cliqueIndex);
 						resultCliques.insert(cliqueIndex);
@@ -382,7 +366,6 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 					}
 				}
 
-				// 在这里去重
 				for (auto& size_indexes : cliquesOfSize)
 				{
 					int size = size_indexes.first;
@@ -394,27 +377,20 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 				}
 			}
 
-			// 这里一个很重要的问题是，假如有两个clique A, B且A包含于B，B做了一次MaxEval，然后A又会跟着做（很明显不是maximal嘛……）
-			// 有什么办法可以避免这种情况？
-			// 其实就相当于先在candCliques里找一遍maximal的，再去判断是否global maximal，但是这个过程太花时间了，感觉本末倒置。。。
-			// 或者不去找，照样拿A一起去做MaxEval，但是这种情况下有没有什么办法帮忙剪一下枝？
 			for (auto& index : candIndexes)
 			{
 				if (index == -1)
 				{
-					continue; // 重复被删掉了
+					continue;
 				}
 				auto& clique = candCliques[index];
 				if (MaxEval(clique, clique, nbrGraph))
 				{
 					InsertNode(clique, u);
-					// 添加
 					AddClique(clique);
 				}
 			}
 
-			// 在这里添加新的邻居才行
-			// 好像是给孤立点加的
 			for (auto nbr : newNbrs)
 			{
 				AddEdge(u, nbr);
@@ -433,25 +409,17 @@ vector<Clique> DynamicClique::AddEdges_BInsert(PUNGraph edgesToInsert)
 	return newCliques;
 }
 
-vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
+vector<Clique> DynamicClique::AddEdges_NIEMCH(PUNGraph edgesToInsert)
 {
-	// startTime = clock();
 	vector<pair<int, int>> deg;
 	GetNonAscDeg(edgesToInsert, deg);
 	while (edgesToInsert->GetEdges() != 0)
 	{
-		/*if (clock() - startTime > maxTime)
-		{
-			isTimeout = true;
-			break;
-		}*/
 		auto& deg_u = deg.back();
 		deg.pop_back();
 		int u = deg_u.second;
 		auto uI = edgesToInsert->GetNI(u);
 		int uDeg = uI.GetDeg();
-		// 边数太少时使用单边算法，如果是Pruning，要考虑(u, nbr)是否已被添加
-		// 暂时不用
 		if (uDeg <= 0)
 		{
 			for (int i = 0; i < uDeg; i++)
@@ -463,7 +431,7 @@ vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
 		else
 		{
 			flat_hash_set<int> N; // N(u, G)∪N(u, G1)
-			vector<int> newNbrs, N_2;
+			vector<int> newNbrs, N_2; // N_2 is the actual N(u, G1), since |N(u, G) ∩ N(u, G1)| may ≠ 0 here
 			N_2.reserve(uDeg);
 			newNbrs.reserve(uDeg);
 			for (int i = 0; i < uDeg; i++)
@@ -482,9 +450,10 @@ vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
 			flat_hash_map<int, Clique> nbrGraph;
 			Clique nbrNodes;
 
+			// lines 5-9 of Algorithm 3
 			if (G->IsNode(u))
 			{
-				flat_hash_set<int> N_1; // N(u, G)
+				flat_hash_set<int> N_1; // N(u, G), not the N_1 in Algorithm 3
 				auto uGI = G->GetNI(u);
 				int uGDeg = uGI.GetDeg();
 				N_1.reserve(uGDeg);
@@ -499,23 +468,21 @@ vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
 				for (auto nbr : N)
 				{
 					nbrNodes.push_back(nbr);
-					if (N_1.find(nbr) == N_1.end())
+					if (N_1.find(nbr) == N_1.end()) // N_2 = N \ N_1, to get the actual N(u, G1)
 					{
 						N_2.push_back(nbr);
 					}
 				}
 				sort(nbrNodes.begin(), nbrNodes.end());
 				sort(N_2.begin(), N_2.end());
-				nbrGraph = GetSubGraph1(G, nbrNodes, nbrGraph);
+				nbrGraph = GetSubGraph1(G, nbrNodes, nbrGraph); // G[N]
 
-				auto& uCliques = cliquesOfNode.at(u);
+				auto& uCliques = cliquesOfNode.at(u); // the cliques containing u
 				for (auto it = uCliques.begin(); it != uCliques.end(); )
 				{
 					int cliqueIndex = *it;
 					auto& clique = maxCliques[cliqueIndex];
 					DeleteNode(clique, u);
-					// 按道理来说，这里的clique应该不包含N_2中的点，因此这里的clique不会用于下面求交集
-					// 这里的问题是，求最小度数花了很多时间……我不是很理解，到底为啥？
 					if (!MaxEval(clique, N_1, nbrGraph))
 					{
 						DelClique(cliqueIndex);
@@ -549,7 +516,7 @@ vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
 				N_2 = std::move(nbrNodes);
 			}
 
-			// 若N_2 = {6, 7, 8}，把cliquesToIntersect划分成：有{6, 7, 8}的、有{7，8}的、有{8}的。注意N_2要有序
+			// line 13 of Algorithm 3
 			flat_hash_set<int> cliquesToIntersect;
 			for (auto n : N_2)
 			{
@@ -563,7 +530,7 @@ vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
 				}
 			}
 
-			flat_hash_set<Clique, clique_hash> candCliques;
+			flat_hash_set<Clique, clique_hash> candCliques; // employ Murmurhash when inserting new clique
 			candCliques.reserve(cliquesToIntersect.size());
 			for (auto& cliqueIndex : cliquesToIntersect)
 			{
@@ -581,13 +548,14 @@ vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
 
 				if (intersections.size() == clique.size())
 				{
-					// 可以直接加，删掉旧的C，加上一个新的C∪{u}
+					// lines 16-17
 					InsertNode(clique, u);
 					cliquesOfNode[u].insert(cliqueIndex);
 					resultCliques.insert(cliqueIndex);
 				}
 				else
 				{
+					// line 18
 					candCliques.emplace(std::move(intersections));
 				}
 			}
@@ -598,13 +566,10 @@ vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
 				if (MaxEval(clique, clique, nbrGraph))
 				{
 					InsertNode(clique, u);
-					// 添加
 					AddClique(clique);
 				}
 			}
 
-			// 在这里添加新的邻居才行
-			// 好像是给孤立点加的
 			for (auto nbr : newNbrs)
 			{
 				AddEdge(u, nbr);
@@ -623,7 +588,7 @@ vector<Clique> DynamicClique::AddEdges_BInsertH(PUNGraph edgesToInsert)
 	return newCliques;
 }
 
-// BK
+// BK for maximal clique enumeration
 void BK(flat_hash_map<int, Clique>& G, Clique& R, Clique& P, Clique& X, const flat_hash_set<int>& fini, vector<Clique>& results)
 {
 	if (P.empty())
@@ -674,7 +639,7 @@ void BK(flat_hash_map<int, Clique>& G, Clique& R, Clique& P, Clique& X, const fl
 	}
 }
 
-vector<Clique> DynamicClique::AddEdges_BInsertM(PUNGraph edgesToInsert)
+vector<Clique> DynamicClique::AddEdges_NIEMCM(PUNGraph edgesToInsert)
 {
 	vector<pair<int, int>> deg;
 	GetNonAscDeg(edgesToInsert, deg);
@@ -748,8 +713,6 @@ vector<Clique> DynamicClique::AddEdges_BInsertM(PUNGraph edgesToInsert)
 					auto& clique = maxCliques[cliqueIndex];
 					cliqueToIndex.erase(clique);
 					DeleteNode(clique, u);
-					// 按道理来说，这里的clique应该不包含N_2中的点，因此这里的clique不会用于下面求交集
-					// 这里的问题是，求最小度数花了很多时间……我不是很理解，到底为啥？
 					if (!MaxEval(clique, N_1, nbrGraph))
 					{
 						DelClique(cliqueIndex);
@@ -785,7 +748,6 @@ vector<Clique> DynamicClique::AddEdges_BInsertM(PUNGraph edgesToInsert)
 				G->AddNode(u, nbrs);
 			}
 
-			// 在nbrGraph中找到所有包含N_2中至少一个点的maximal clique
 			vector<Clique> cliques;
 			flat_hash_set<int> X_;
 			X_.reserve(N_2.size());
@@ -815,8 +777,6 @@ vector<Clique> DynamicClique::AddEdges_BInsertM(PUNGraph edgesToInsert)
 				AddClique2(clique);
 			}
 
-			// 在这里添加新的邻居才行
-			// 好像是给孤立点加的
 			for (auto nbr : newNbrs)
 			{
 				G->AddEdge2(u, nbr);
@@ -1070,8 +1030,6 @@ void DynamicClique::IMCE_SubCliques(PUNGraph edgesToInsert, vector<Clique>& newC
 		for (auto& e : intersections)
 		{
 			int u = e.first, v = e.second;
-			// 我突然想起来，好像这样不可以，假如原来S = {0, 1}，然后0拆成了两个{2, 3}
-			// 本来应该是{1, 2, 3}，但是这样子的话，会继续遍历2和3，然后继续拆（可能的话）……
 			vector<Clique> candInsertion;
 			candInsertion.reserve(S.size());
 			for (flat_hash_set<Clique, clique_hash>::iterator it = S.begin(); it != S.end();)
@@ -1115,82 +1073,4 @@ void DynamicClique::IMCE_SubCliques(PUNGraph edgesToInsert, vector<Clique>& newC
 			}
 		}
 	}
-}
-
-vector<Clique> DynamicClique::DelEdges(PUNGraph edgesToDelete)
-{
-	/*flat_hash_map<int, int> deg;
-	set<Edge, greater<Edge>> nonAscDeg;
-	GetNonAscDeg(edgesToDelete, deg, nonAscDeg);
-	while (edgesToDelete->GetEdges() != 0)
-	{
-		auto deg_u = nonAscDeg.begin();
-		int u = deg_u->second, uDeg = deg_u->first;
-		auto uI = edgesToDelete->GetNI(u);
-
-		flat_hash_set<int> N_1, N;
-		auto uGI = G->GetNI(u);
-		auto uGDeg = uGI.GetDeg();
-		for (int i = 0; i < uGDeg; i++)
-		{
-			int nbr = uGI.GetNbrNId(i);
-			N_1.insert(nbr);
-		}
-		for (int i = 0; i < uDeg; i++)
-		{
-			int nbr = uI.GetNbrNId(i);
-			N.insert(uI.GetNbrNId(i));
-			MaintainDeg_DelNode(deg, nonAscDeg, nbr);
-		}
-
-		set<int> uCliques(cliquesOfNode[u]);
-
-		for (auto cliqueIndex : uCliques)
-		{
-			vector<int> intersections;
-			intersections.reserve(MIN(maxCliques[cliqueIndex].size(), N.size()));
-			for (auto node : maxCliques[cliqueIndex])
-			{
-				if (N.find(node) != N.end())
-				{
-					intersections.push_back(node);
-				}
-			}
-			if (intersections.size() != 0)
-			{
-				for (auto node : intersections)
-				{
-					G->DelEdge(u, node);
-				}
-				Clique clique(maxCliques[cliqueIndex]);
-				DeleteNode(clique, u);
-				if (MaxEval(clique, N_1, G))
-				{
-					AddClique(clique);
-				}
-
-				vector<int> cand;
-				cand.reserve(clique.size());
-				clique = maxCliques[cliqueIndex];
-				set_difference(clique.begin(), clique.end(), intersections.begin(), intersections.end(), back_inserter(cand));
-				if (MaxEval(cand, clique, G))
-				{
-					AddClique(cand);
-				}
-				DelClique(cliqueIndex);
-			}
-		}
-		edgesToDelete->DelNode(u);
-		deg.erase(u);
-		nonAscDeg.erase(make_pair(uDeg, u));
-	}
-
-	vector<Clique> newCliques;
-	newCliques.reserve(resultCliques.size());
-	for (auto cliqueIndex : resultCliques)
-	{
-		newCliques.push_back(maxCliques[cliqueIndex]);
-	}
-	resultCliques.clear();
-	return newCliques;*/
 }

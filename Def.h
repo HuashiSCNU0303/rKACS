@@ -17,7 +17,6 @@
 #include <chrono>
 #include <phmap.h>
 
-// Windows下测算内存使用
 #if defined(_WIN64)
 #include <windows.h>
 #include <psapi.h>
@@ -47,14 +46,14 @@ constexpr auto TIME_LIMIT = 3600;
 
 constexpr auto BASELINE = 1;
 constexpr auto KRCORE = 2;
-constexpr auto SINSERT = 3;
+constexpr auto MCMEI = 3;
 constexpr auto IMCE = 4;
-constexpr auto BINSERTH = 5;
-constexpr auto BINSERT = 6;
+constexpr auto NIEMCH = 5;
+constexpr auto NIEMC = 6;
 constexpr auto PRUNING = 7;
-const string METHOD_NAMES[7] = { "Baseline", "KRCore", "SInsert", "IMCE", "BInsertH", "BInsert", "Pruning" };
+const string METHOD_NAMES[7] = { "Baseline", "KRCore", "MCMEI", "IMCE", "NIEMCH", "NIEMC", "Pruning" };
 
-// pair类型的哈希值计算
+// compute the hash value for pair<int, int>, deprecated
 template <typename T>
 inline void hash_combine(std::size_t& seed, const T& val) 
 {
@@ -112,7 +111,7 @@ struct clique_eq
     }
 };
 
-// 边的权值类型（Weight）的定义
+// here we use fractions to denote score(u, v, Q_W) and CSQ
 int gcd(int num, int deno);
 typedef struct Weight 
 {
@@ -156,13 +155,11 @@ typedef struct Weight
 const Weight WEIGHT_ZERO(0, 1);
 const Weight WEIGHT_MAX(INT_MAX - 1, 1);
 
-// 边的类型（Edge）的定义
 typedef pair<int, int> Edge;
 Edge GetEdge(int u, int v);
 bool SortEdge(const Edge& e1, const Edge& e2);
 bool SortEdge2(const Edge& e1, const Edge& e2);
 
-// 顶点集合类型（Clique）的定义
 typedef vector<int> Clique;
 bool CompareClique(const Clique& c1, const Clique& c2);
 bool CompareLongClique(const vector<long>& a, const vector<long>& b);

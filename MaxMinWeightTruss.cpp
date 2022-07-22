@@ -29,21 +29,10 @@ void MaxMinWeightTruss::LoadVertexAttribute(const char* fileName)
 	}
 	fclose(attributeF);
 
-	/*set<pair<int, int>> attrNodeSize;
-	for (auto& attr_nodes : nodesInAttr)
-	{
-		attrNodeSize.insert(make_pair(attr_nodes.second.size(), attr_nodes.first));
-	}
-
-	for (auto& size_attr : attrNodeSize)
-	{
-		printf("%d: %d nodes\n", size_attr.second, size_attr.first);
-	}*/
-
 	return;
 }
 
-void MaxMinWeightTruss::LoadTrussness(const char* fileName)
+int MaxMinWeightTruss::LoadTrussness(const char* fileName)
 {
 	if (fileName != NULL)
 	{
@@ -89,6 +78,7 @@ void MaxMinWeightTruss::LoadTrussness(const char* fileName)
 				}
 			}
 			fclose(FedgeTruss);
+			return 1;
 		}
 		else
 		{
@@ -105,11 +95,13 @@ void MaxMinWeightTruss::LoadTrussness(const char* fileName)
 				fprintf(FedgeTruss, "%d\t%d\t%d\n", u, v, truss);
 			}
 			fclose(FedgeTruss);
+			return 0;
 		}
 	}
+	return -1;
 }
 
-void MaxMinWeightTruss::LoadSimilarity(const char* fileName)
+int MaxMinWeightTruss::LoadSimilarity(const char* fileName)
 {
 	if (fileName != NULL)
 	{
@@ -126,6 +118,7 @@ void MaxMinWeightTruss::LoadSimilarity(const char* fileName)
 				edgeSims.emplace(GetEdge(u, v), sim);
 			}
 			file.close();
+			return 1;
 		}
 		else
 		{
@@ -155,8 +148,10 @@ void MaxMinWeightTruss::LoadSimilarity(const char* fileName)
 				simFile.write((char*)&sim, sizeof(Weight));
 			}
 			simFile.close();
+			return 0;
 		}
 	}
+	return -1;
 }
 
 Weight MaxMinWeightTruss::ComputeEdgeSim(flat_hash_set<int>& nodeAttrs, int node)
@@ -174,7 +169,6 @@ Weight MaxMinWeightTruss::ComputeEdgeSim(flat_hash_set<int>& nodeAttrs, int node
 	return comAttrCnt != 0 ? Weight(comAttrCnt, nodeAttrs.size() + v2Size - comAttrCnt) : WEIGHT_ZERO;
 }
 
-// 计算所有的点与查询属性集的共同属性数
 void MaxMinWeightTruss::ComputeComAttrCnt(vector<Attribute>& queryAttrs)
 {
 	if (queryAttrs[0] != -1)
@@ -192,7 +186,6 @@ void MaxMinWeightTruss::ComputeComAttrCnt(vector<Attribute>& queryAttrs)
 	}
 	else
 	{
-		// 需要排除query keyword的影响的时候用这个
 		for (TUNGraph::TNodeI NI = maxKTruss->BegNI(); NI != maxKTruss->EndNI(); NI++)
 		{
 			nodeComAttrCnt[NI.GetId()] = 1;
@@ -200,7 +193,6 @@ void MaxMinWeightTruss::ComputeComAttrCnt(vector<Attribute>& queryAttrs)
 	}
 }
 
-// 计算nodes中所有点对的权值
 void MaxMinWeightTruss::ComputeWeight(Clique& nodes, WeightEdgeMap& results, bool addEdges)
 {
 	flat_hash_set<Attribute> nodeAttrs;
@@ -218,9 +210,7 @@ void MaxMinWeightTruss::ComputeWeight(Clique& nodes, WeightEdgeMap& results, boo
 		for (int j = i + 1; j < nodeCnt; j++)
 		{
 			int v = nodes[j];
-			// 算点对与Query共享的属性个数和
 			int comAttrCnt = uComAttrCnt + nodeComAttrCnt[v];
-			// 算点对的Jaccard Similarity
 			Weight sim = ComputeEdgeSim(nodeAttrs, v);
 			if (sim == WEIGHT_ZERO)
 			{
@@ -260,9 +250,7 @@ void MaxMinWeightTruss::ComputeWeight()
 			{
 				continue;
 			}
-			// 算点对与Query共享的属性个数和
 			int comAttrCnt = uComAttrCnt + nodeComAttrCnt.at(nbr);
-			// 算点对的Jaccard Similarity
 			Edge e = make_pair(u, nbr);
 			Weight weight = edgeSims[e] * comAttrCnt;
 			edgeWeightInSN[weight].push_back(e);
@@ -281,9 +269,7 @@ bool MaxMinWeightTruss::TestTrussWeightEqual(Clique& clique, Weight weight)
 		for (int j = i + 1; j < nodeCnt; j++)
 		{
 			int v = clique[j];
-			// 算点对与Query共享的属性个数和
 			int comAttrCnt = uComAttrCnt + nodeComAttrCnt[v];
-			// 算点对的Jaccard Similarity
 			Weight sim = ComputeEdgeSim(nodeAttrs, v);
 			Weight w = sim * comAttrCnt;
 			if (w == weight)
@@ -296,7 +282,6 @@ bool MaxMinWeightTruss::TestTrussWeightEqual(Clique& clique, Weight weight)
 	return false;
 }
 
-// 计算maximal k-truss
 void MaxMinWeightTruss::GetMaxKTrussByIndex(int k)
 {
 	int trussValueCnt = trussnessToEdges.size();
@@ -318,7 +303,6 @@ void MaxMinWeightTruss::GetMaxKTrussByIndex(int k)
 
 	for (int i = k; i < trussValueCnt; i++)
 	{
-		// 不同k值之间的点对不是有序的……fine，之前写的时候忘了这一点
 		for (auto& edge : trussnessToEdges[i])
 		{
 			int u = edge.first, v = edge.second;
@@ -330,15 +314,14 @@ void MaxMinWeightTruss::GetMaxKTrussByIndex(int k)
 
 void MaxMinWeightTruss::PrepareQuery(int k, vector<int> queryAttrs)
 {
-	// 找maximal k-truss
 	maxKTruss->Clr();
 	GetMaxKTrussByIndex(k);
 
-	// 计算每个顶点与查询属性集的共同属性数
+	// compute |A(u) ∩ Q_W| for each node u ∈ V(G)
 	nodeComAttrCnt.clear();
 	ComputeComAttrCnt(queryAttrs);
 
-	// 过滤不含Query属性的顶点
+	// delete the irrelevant nodes
 	vector<int> nodes;
 	nodes.reserve(maxKTruss->GetNodes());
 	for (auto& node_cnt : nodeComAttrCnt)
@@ -351,7 +334,7 @@ void MaxMinWeightTruss::PrepareQuery(int k, vector<int> queryAttrs)
 	sort(nodes.begin(), nodes.end());
 	maxKTruss = GetSubGraph(maxKTruss, nodes);
 
-	// 过滤相似度为0的边
+	// delete the edges with attribute similarity = 0
 	vector<Edge> edges;
 	edges.reserve(2000);
 	for (TUNGraph::TEdgeI EI = maxKTruss->BegEI(); EI != maxKTruss->EndEI(); EI++)
@@ -372,7 +355,7 @@ void MaxMinWeightTruss::PrepareQuery(int k, vector<int> queryAttrs)
 	edgeWeightInSN.clear();
 }
 
-// 求Degeneracy Order（实际上就是做Core Decomposition，迭代地删除图内度数最小的顶点）
+// Get the degeneracy order of the vertices in G
 void MaxMinWeightTruss::GetDegeneracyOrder(PUNGraph G, Clique& vertexOrder)
 {
 	PUNGraph graph = new TUNGraph(*G);
@@ -532,10 +515,11 @@ void MaxMinWeightTruss::QueryByPairs_Baseline(int k, int r, const vector<Edge>& 
 	PUNGraph G = TUNGraph::New();
 	for (auto& weight_cnt : weightIndex)
 	{
+		// lines 5-6 of Algorithm 1
 		Weight weight = weight_cnt.first;
 		int cnt = weight_cnt.second;
 		PUNGraph updateEdgeGraph = TUNGraph::New();
-		// 构建图
+
 		for (int i = pairLIndex; i < pairLIndex + cnt; i++)
 		{
 			int u = pairs[i].first, v = pairs[i].second;
@@ -550,6 +534,7 @@ void MaxMinWeightTruss::QueryByPairs_Baseline(int k, int r, const vector<Edge>& 
 			break;
 		}
 
+		// lines 7 of Algorithm 1
 		GetResults(k, weight, resultCliques, updateEdgeGraph, results);
 		pairLIndex = pairLIndex + cnt;
 
@@ -570,7 +555,7 @@ void MaxMinWeightTruss::QueryByPairs_Maintain(int k, int r, DynamicClique* dynam
 	{
 		Weight weight = weight_cnt.first;
 		int cnt = weight_cnt.second;
-		// 构建图
+
 		for (int i = pairLIndex; i < pairLIndex + cnt; i++)
 		{
 			updateEdgeGraph->AddEdge2(pairs[i].first, pairs[i].second);
@@ -579,7 +564,7 @@ void MaxMinWeightTruss::QueryByPairs_Maintain(int k, int r, DynamicClique* dynam
 		PUNGraph updateEdgeGraph1 = new TUNGraph(*updateEdgeGraph);
 		vector<Clique> newCliques;
 		clock_t startTime = clock();
-		if (method == SINSERT)
+		if (method == MCMEI)
 		{
 			newCliques = dynamicClique->AddEdges_SInsert(updateEdgeGraph);
 		}
@@ -589,15 +574,15 @@ void MaxMinWeightTruss::QueryByPairs_Maintain(int k, int r, DynamicClique* dynam
 			dynamicClique->SetMaxTime(LIMIT);
 			newCliques = dynamicClique->AddEdges_IMCE(updateEdgeGraph);
 		}
-		else if (method == BINSERTH)
+		else if (method == NIEMCH)
 		{
 			auto LIMIT = TIME_LIMIT * CLOCKS_PER_SEC - maintainTime;
 			dynamicClique->SetMaxTime(LIMIT);
-			newCliques = dynamicClique->AddEdges_BInsertH(updateEdgeGraph);
+			newCliques = dynamicClique->AddEdges_NIEMCH(updateEdgeGraph);
 		}
-		else if (method == BINSERT)
+		else if (method == NIEMC)
 		{
-			newCliques = dynamicClique->AddEdges_BInsert(updateEdgeGraph);
+			newCliques = dynamicClique->AddEdges_NIEMC(updateEdgeGraph);
 		}
 		maintainTime += (clock() - startTime);
 		if (maintainTime >= TIME_LIMIT * CLOCKS_PER_SEC)
@@ -606,17 +591,6 @@ void MaxMinWeightTruss::QueryByPairs_Maintain(int k, int r, DynamicClique* dynam
 			isTimeout = true;
 			return;
 		}
-
-		/*cout << "weight = " << (double)weight.numerator / weight.denominator << endl;
-		for (auto& clique : newCliques)
-		{
-			for (auto node : clique)
-			{
-				cout << node << " ";
-			}
-			cout << endl;
-		}
-		cout << endl;*/
 
 		GetResults(k, weight, newCliques, updateEdgeGraph1, results);
 		pairLIndex = pairLIndex + cnt;
@@ -631,6 +605,7 @@ void MaxMinWeightTruss::QueryByPairs_Maintain(int k, int r, DynamicClique* dynam
 	}
 }
 
+// GetKAC
 void MaxMinWeightTruss::GetResults(int k, Weight weight, vector<Clique>& newCliques, PUNGraph updateEdgeGraph, ResultMap& results)
 {
 	vector<Clique> cliques;
@@ -659,12 +634,13 @@ void MaxMinWeightTruss::GetResults(int k, Weight weight, vector<Clique>& newCliq
 			{
 				if (clique.size() == newClique.size())
 				{
-					// 已经是maximal
+					// already maximal
 					results[weight].push_back(clique);
 					cliques.push_back(clique);
 				}
 				else
 				{
+					// line 6
 					int newIndex = cliques.size();
 					cliques.push_back(clique);
 					candIndexes.push_back(newIndex);
@@ -677,6 +653,7 @@ void MaxMinWeightTruss::GetResults(int k, Weight weight, vector<Clique>& newCliq
 		weightEqPairs.Clr();
 	}
 
+	// remove identical triangle-connected k-truss
 	for (auto& size_indexes : cliquesOfSize)
 	{
 		int size = size_indexes.first;
@@ -687,7 +664,7 @@ void MaxMinWeightTruss::GetResults(int k, Weight weight, vector<Clique>& newCliq
 		}
 	}
 	
-	// 没有和本来就已经是maximal的进行判断
+	// line 7
 	vector<pair<int, int>> sortedIndexes;
 	sortedIndexes.reserve(indexes.size());
 	for (auto index : indexes)
@@ -701,7 +678,7 @@ void MaxMinWeightTruss::GetResults(int k, Weight weight, vector<Clique>& newCliq
 	}
 	sort(sortedIndexes.begin(), sortedIndexes.end(), SortEdge);
 
-	for (auto& index : candIndexes)
+	for (auto& index : candIndexes) // line 8
 	{
 		if (indexes[index] == -1)
 		{
@@ -720,9 +697,9 @@ void MaxMinWeightTruss::GetResults(int k, Weight weight, vector<Clique>& newCliq
 			auto& bigIndex = sortedIndexes[m].second;
 			auto& bigClique = cliques[bigIndex];
 
-			if (IsIn(clique, bigClique))
+			if (IsIn(clique, bigClique)) // such clique T'(bigClique) exists, then T \subseteq T', so T(clique) is not maximal
 			{
-				isMaximal = false; // 此时clique在bigClique中，证明clique不是一个maximal的k-truss
+				isMaximal = false; 
 				break;
 			}
 		}
@@ -733,6 +710,7 @@ void MaxMinWeightTruss::GetResults(int k, Weight weight, vector<Clique>& newCliq
 	}
 } 
 
+// GetKAC, slightly modified for KRCore
 void MaxMinWeightTruss::GetResults_KRCore(int k, Weight weight, vector<Clique>& newCliques, ResultMap& results)
 {
 	vector<Clique> cliques;
@@ -838,7 +816,6 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Baseline(int k, int r, vector<int> qu
 	PrepareQuery(k, queryAttrs);
 	ResultMap results;
 
-	// 找triangle-connected
 	auto maxTCKTruss = GetMaxTCKTruss(maxKTruss);
 	WeightEdgeMap edgeWeightMap;
 	vector<Edge> pairs;
@@ -851,17 +828,20 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Baseline(int k, int r, vector<int> qu
 			return results;
 		}
 	}
+
+	// organize the node pairs in edgeWeightMap
+	// pairs are sorted in descending order of its pairwise weight
+	// the weight value are stored in weightIndex, since many pairs share the same weight value
+	// each pair in weightIndex is <weight value s, count of node pair with weight = s>
 	for (auto weight_edges = edgeWeightMap.begin(); weight_edges != edgeWeightMap.end();)
 	{
 		Weight weight = weight_edges->first;
-		// 把edgeWeightMap中的点对按权值大小顺序转移到pairs里，并在原来的map中删掉它
 		pairs.insert(pairs.end(), weight_edges->second.begin(), weight_edges->second.end());
 		weightIndex.push_back(make_pair(weight, weight_edges->second.size()));
 		edgeWeightMap.erase(weight_edges++);
 	}
 	WeightEdgeMap().swap(edgeWeightMap);
 
-	// 对pairs内的点对，按老方法找到符合要求的k-truss
 	QueryByPairs_Baseline(k, r, pairs, weightIndex, results);
 	return results;
 }
@@ -875,7 +855,6 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_KRCore(int k, int r, vector<int> quer
 	KRCore krCore;
 	krCore.initAttrs(maxKTruss, attrsOfNode, queryAttrs);
 
-	// 找triangle-connected
 	auto maxTCKTruss = GetMaxTCKTruss(maxKTruss);
 	WeightEdgeMap weights;
 	for (auto& t : maxTCKTruss)
@@ -934,7 +913,6 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Maintain(int k, int r, vector<int> qu
 	PrepareQuery(k, queryAttrs);
 	ResultMap results;
 
-	// 找triangle-connected
 	auto maxTCKTruss = GetMaxTCKTruss(maxKTruss);
 	WeightEdgeMap edgeWeightMap;
 	vector<Edge> pairs;
@@ -950,14 +928,12 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Maintain(int k, int r, vector<int> qu
 	for (auto weight_edges = edgeWeightMap.begin(); weight_edges != edgeWeightMap.end();)
 	{
 		Weight weight = weight_edges->first;
-		// 把edgeWeightMap中的点对按权值大小顺序转移到pairs里，并在原来的map中删掉它
 		pairs.insert(pairs.end(), weight_edges->second.begin(), weight_edges->second.end());
 		weightIndex.push_back(make_pair(weight, weight_edges->second.size()));
 		edgeWeightMap.erase(weight_edges++);
 	}
 	WeightEdgeMap().swap(edgeWeightMap);
 
-	// 对pairs内的点对，按老方法找到符合要求的k-truss
 	DynamicClique* dynamicClique = new DynamicClique();
 	QueryByPairs_Maintain(k, r, dynamicClique, pairs, weightIndex, results, method);
 	delete dynamicClique;
@@ -967,17 +943,19 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Maintain(int k, int r, vector<int> qu
 ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning(int k, int r, vector<int> queryAttrs)
 {
 	PrepareQuery(k, queryAttrs);
-	ComputeWeight(); // 计算edgeWeightInSN;
+	ComputeWeight(); 
 
 	ResultMap results;
 
+	// nonDecSup here consists of two EdgeSet, nonDecSup[1] stores the edges with support >= k - 2, 
+    // and nonDecSup[0] stores the edges with support < k - 2
 	EdgeMap sup;
 	vector<EdgeSet> nonDecSup;
-	nonDecSup.resize(2); // nonDecSup[0]表示支持度＜k-2的边，nonDecSup[1]表示支持度≥k-2的边
-	PUNGraph S = TUNGraph::New(); // 加入top-i大的边以后形成的子图
-	WeightEdgeMap pairsLeqUb; // 比ub要小的点对的集合
+	nonDecSup.resize(2);
+	PUNGraph S = TUNGraph::New(); // we incrementally add edges to build G'_{>=s}
+	WeightEdgeMap pairsLeqUb; // P_0
 	auto it = edgeWeightInSN.begin();
-	Weight ub(3 * queryAttrs.size(), 1); // 某次添加边的权值上界
+	Weight ub(3 * queryAttrs.size(), 1); 
 
 	DynamicTCTruss* dynamicTCTruss = new DynamicTCTruss();
 	DynamicClique* dynamicClique = new DynamicClique();
@@ -987,24 +965,22 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning(int k, int r, vector<int> que
 	{
 		Weight w = it != edgeWeightInSN.end() ? it->first : WEIGHT_ZERO;
 		vector<Edge> P_1;
-		vector<Edge> P_2; // P_1是权值在[w, ub)内的点对，P_2是权值 > ub的点对
+		vector<Edge> P_2; 
 		vector<Index> P_1_WeightIndex;
 		if (it != edgeWeightInSN.end())
 		{
 			for (auto& e : it->second)
 			{
-				// 需要先构建好nonDecSup
 				MaintainSupport_AddEdge(S, sup, nonDecSup, e, k);
 			}
 
 			unordered_set<Edge, pair_hash> newEdges = GetMaxKTrussInc(dynamicTCTruss->GetTruss(), k, sup, nonDecSup);
 			if (!newEdges.empty())
 			{
-				// 找到的truss有变化，计算新truss中新出现的点对
 				dynamicTCTruss->AddEdges(newEdges);
-				flat_hash_map<int, vector<int>> newPairs = dynamicTCTruss->GetNewPairs();
-				// 都是新出现的TCKtruss，与上一次迭代相同的TCKTruss不会出现
+				flat_hash_map<int, vector<int>> newPairs = dynamicTCTruss->GetNewPairs(); // P
 				flat_hash_set<int> nodeAttrs;
+				// compute the pairwise weight for each pair in P
 				for (auto& pair : newPairs)
 				{
 					int u = pair.first, uComAttrCnt = nodeComAttrCnt[u];
@@ -1012,9 +988,7 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning(int k, int r, vector<int> que
 					auto& nodes = pair.second;
 					for (int v : nodes)
 					{
-						// 算点对与Query共享的属性个数和
 						int comAttrCnt = uComAttrCnt + nodeComAttrCnt[v];
-						// 算点对的Jaccard Similarity
 						Weight sim = ComputeEdgeSim(nodeAttrs, v);
 						if (sim == WEIGHT_ZERO)
 						{
@@ -1038,13 +1012,12 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning(int k, int r, vector<int> que
 			it++;
 		}
 
-		// 获取需要按序添加的点对。通过map已经排序
+		// obtain P_1 and P_0(= P_0 \ P_1)
 		for (auto weight_edges = pairsLeqUb.begin(); weight_edges != pairsLeqUb.end();)
 		{
 			Weight weight = weight_edges->first;
 			if (weight >= w && weight < ub)
 			{
-				// 把pairsLeqUb中权值在[w, ub)内的点对转移到P_1里，并在原来的map中删掉它
 				P_1.insert(P_1.end(), weight_edges->second.begin(), weight_edges->second.end());
 				P_1_WeightIndex.push_back(make_pair(weight, weight_edges->second.size()));
 				pairsLeqUb.erase(weight_edges++);
@@ -1055,18 +1028,17 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning(int k, int r, vector<int> que
 			}
 		}
 
-		// 把P_2内的所有点对直接加入，维护得到新的maximal cliques，且不需要再在得到的maximal cliques里算k-truss
+		// line 11 of Algorithm 6
 		for (auto& pair : P_2)
 		{
 			updateEdgeGraph->AddEdge2(pair.first, pair.second);
 		}
-		// 这个过程中updateEdgeGraph里的边会直接被删掉，但是点删不掉……
-		dynamicClique->AddEdges_BInsertH(updateEdgeGraph);
+		dynamicClique->AddEdges_NIEMCH(updateEdgeGraph);
 		updateEdgeGraph->Clr();
 		vector<Edge>().swap(P_2);
 
-		// 对P_1内的点对，按老方法找到符合要求的k-truss
-		QueryByPairs_Maintain(k, r, dynamicClique, P_1, P_1_WeightIndex, results, BINSERTH);
+		// lines 14-19 of Algorithm 6
+		QueryByPairs_Maintain(k, r, dynamicClique, P_1, P_1_WeightIndex, results, NIEMCH);
 
 		if (results.size() == r)
 		{
@@ -1085,17 +1057,17 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning(int k, int r, vector<int> que
 ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning1(int k, int r, vector<int> queryAttrs, int method)
 {
 	PrepareQuery(k, queryAttrs);
-	ComputeWeight(); // 计算edgeWeightInSN;
+	ComputeWeight(); 
 
 	ResultMap results;
 
 	EdgeMap sup;
 	vector<EdgeSet> nonDecSup;
-	nonDecSup.resize(2); // nonDecSup[0]表示支持度＜k-2的边，nonDecSup[1]表示支持度≥k-2的边
-	PUNGraph S = TUNGraph::New(); // 加入top-i大的边以后形成的子图
-	WeightEdgeMap pairsLeqUb; // 比ub要小的点对的集合
+	nonDecSup.resize(2); 
+	PUNGraph S = TUNGraph::New(); 
+	WeightEdgeMap pairsLeqUb; 
 	auto it = edgeWeightInSN.begin();
-	Weight ub(3 * queryAttrs.size(), 1); // 某次添加边的权值上界
+	Weight ub(3 * queryAttrs.size(), 1); 
 
 	DynamicTCTruss* dynamicTCTruss = new DynamicTCTruss();
 	DynamicClique* dynamicClique = new DynamicClique();
@@ -1105,23 +1077,20 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning1(int k, int r, vector<int> qu
 	{
 		Weight w = it != edgeWeightInSN.end() ? it->first : WEIGHT_ZERO;
 		vector<Edge> P_1;
-		vector<Edge> P_2; // P_1是权值在[w, ub)内的点对，P_2是权值 > ub的点对
+		vector<Edge> P_2; 
 		vector<Index> P_1_WeightIndex;
 		if (it != edgeWeightInSN.end())
 		{
 			for (auto& e : it->second)
 			{
-				// 需要先构建好nonDecSup
 				MaintainSupport_AddEdge(S, sup, nonDecSup, e, k);
 			}
 
 			unordered_set<Edge, pair_hash> newEdges = GetMaxKTrussInc(dynamicTCTruss->GetTruss(), k, sup, nonDecSup);
 			if (!newEdges.empty())
 			{
-				// 找到的truss有变化，计算新truss中新出现的点对
 				dynamicTCTruss->AddEdges(newEdges);
 				flat_hash_map<int, vector<int>> newPairs = dynamicTCTruss->GetNewPairs();
-				// 都是新出现的TCKtruss，与上一次迭代相同的TCKTruss不会出现
 				flat_hash_set<int> nodeAttrs;
 				for (auto& pair : newPairs)
 				{
@@ -1130,9 +1099,7 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning1(int k, int r, vector<int> qu
 					auto& nodes = pair.second;
 					for (int v : nodes)
 					{
-						// 算点对与Query共享的属性个数和
 						int comAttrCnt = uComAttrCnt + nodeComAttrCnt[v];
-						// 算点对的Jaccard Similarity
 						Weight sim = ComputeEdgeSim(nodeAttrs, v);
 						if (sim == WEIGHT_ZERO)
 						{
@@ -1156,13 +1123,11 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning1(int k, int r, vector<int> qu
 			it++;
 		}
 
-		// 获取需要按序添加的点对。通过map已经排序
 		for (auto weight_edges = pairsLeqUb.begin(); weight_edges != pairsLeqUb.end();)
 		{
 			Weight weight = weight_edges->first;
 			if (weight >= w && weight < ub)
 			{
-				// 把pairsLeqUb中权值在[w, ub)内的点对转移到P_1里，并在原来的map中删掉它
 				P_1.insert(P_1.end(), weight_edges->second.begin(), weight_edges->second.end());
 				P_1_WeightIndex.push_back(make_pair(weight, weight_edges->second.size()));
 				pairsLeqUb.erase(weight_edges++);
@@ -1173,16 +1138,12 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning1(int k, int r, vector<int> qu
 			}
 		}
 
-		// 把P_2内的所有点对直接加入，维护得到新的maximal cliques，且不需要再在得到的maximal cliques里算k-truss
 		for (auto& pair : P_2)
 		{
 			updateEdgeGraph->AddEdge2(pair.first, pair.second);
-		}
-		// 这个过程中updateEdgeGraph里的边会直接被删掉，但是点删不掉……
-		// dynamicClique->AddEdges_BInsertH(updateEdgeGraph);
-		
+		}		
 		clock_t startTime = clock();
-		if (method == SINSERT)
+		if (method == MCMEI)
 		{
 			dynamicClique->AddEdges_SInsert(updateEdgeGraph);
 		}
@@ -1192,11 +1153,9 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning1(int k, int r, vector<int> qu
 			dynamicClique->SetMaxTime(LIMIT);
 			dynamicClique->AddEdges_IMCE(updateEdgeGraph);
 		}
-		else if (method == BINSERTH)
+		else if (method == NIEMCH)
 		{
-			// auto LIMIT = TIME_LIMIT * CLOCKS_PER_SEC - maintainTime;
-			// dynamicClique->SetMaxTime(LIMIT);
-			dynamicClique->AddEdges_BInsertH(updateEdgeGraph);
+			dynamicClique->AddEdges_NIEMCH(updateEdgeGraph);
 		}
 		maintainTime += (clock() - startTime);
 		if (maintainTime >= TIME_LIMIT * CLOCKS_PER_SEC)
@@ -1209,7 +1168,6 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning1(int k, int r, vector<int> qu
 		updateEdgeGraph->Clr();
 		vector<Edge>().swap(P_2);
 
-		// 对P_1内的点对，按老方法找到符合要求的k-truss
 		QueryByPairs_Maintain(k, r, dynamicClique, P_1, P_1_WeightIndex, results, method);
 
 		if (results.size() == r)
@@ -1226,56 +1184,6 @@ ResultMap MaxMinWeightTruss::BottomUpQuery_Pruning1(int k, int r, vector<int> qu
 	return results;
 }
 
-Memory MaxMinWeightTruss::Query_MemoryWrapper(int method, int k, int r, vector<int> queryAttrs)
-{
-#if defined(_WIN64)
-	std::mutex m;
-	std::condition_variable cv;
-	int maxMemory = -1;
-	bool stopFlag = false;
-
-	std::unique_lock<std::mutex> my_lock(m);
-
-	std::thread t([&cv, &maxMemory, &stopFlag]()
-	{
-		int maxMemoryUsage = 0;
-		HANDLE handle = GetCurrentProcess();
-		while (true)
-		{
-			if (stopFlag)
-			{
-				break;
-			}
-			PROCESS_MEMORY_COUNTERS pmc;
-			GetProcessMemoryInfo(handle, &pmc, sizeof(pmc));
-			int currentMemoryUsage = pmc.WorkingSetSize / 1000;
-			if (currentMemoryUsage > maxMemoryUsage)
-			{
-				maxMemoryUsage = currentMemoryUsage;
-			}
-			std::this_thread::sleep_for(0.02s);
-		}
-		maxMemory = maxMemoryUsage;
-		cv.notify_one();
-	});
-
-
-	t.detach();
-	if (method == 1)
-	{
-		// BottomUpQuery_BInsert(k, r, queryAttrs);
-	}
-	else if (method == 2)
-	{
-		BottomUpQuery_Pruning(k, r, queryAttrs);
-	}
-	stopFlag = true;
-	cv.wait_for(my_lock, 10s);
-
-	return maxMemory;
-#endif
-}
-
 Time MaxMinWeightTruss::Query_TimeWrapper(int method, int k, int r, vector<int> queryAttrs)
 {
 	Time time = 0;
@@ -1283,26 +1191,31 @@ Time MaxMinWeightTruss::Query_TimeWrapper(int method, int k, int r, vector<int> 
 	isTimeout = false;
 	if (method == BASELINE)
 	{
+		// Basic
 		BottomUpQuery_Baseline(k, r, queryAttrs);
 		time = (double)(clock() - gStartTime) / CLOCKS_PER_SEC;
 	}
 	else if (method == KRCORE)
 	{
+		// Basic+KRCore
 		BottomUpQuery_KRCore(k, r, queryAttrs);
 		time = (double)(clock() - gStartTime) / CLOCKS_PER_SEC;
 	}
-	else if (method == BINSERT)
+	else if (method == NIEMC)
 	{
-		BottomUpQuery_Maintain(k, r, queryAttrs, BINSERTH);
+		// Basic+NIEMC
+		BottomUpQuery_Maintain(k, r, queryAttrs, NIEMCH);
 		time = (double)(clock() - gStartTime) / CLOCKS_PER_SEC;
 	}
 	else if (method == PRUNING)
 	{
+		// Incremental
 		BottomUpQuery_Pruning(k, r, queryAttrs);
 		time = (double)(clock() - gStartTime) / CLOCKS_PER_SEC;
 	}
 	else
 	{
+		// test the time for different IEMC methods(MCMEI/IMCE/NIEMC)
 		BottomUpQuery_Pruning1(k, r, queryAttrs, method);
 		time = (double)maintainTime / CLOCKS_PER_SEC;
 	}
@@ -1314,17 +1227,14 @@ ResultMap MaxMinWeightTruss::VACQuery(int k, vector<int>& queryAttrs)
 {
 	ResultMap results;
 
-	// 找maximal k-truss
 	maxKTruss->Clr();
 	GetMaxKTrussByIndex(k);
 
 	if (!queryAttrs.empty())
 	{
-		// 计算每个顶点与查询属性集的共同属性数
 		nodeComAttrCnt.clear();
 		ComputeComAttrCnt(queryAttrs);
 
-		// 过滤不含Query属性的顶点
 		vector<int> nodes;
 		nodes.reserve(maxKTruss->GetNodes());
 		for (auto& node_cnt : nodeComAttrCnt)
@@ -1350,7 +1260,6 @@ ResultMap MaxMinWeightTruss::VACQuery(int k, vector<int>& queryAttrs)
 		nodeComAttrCnt[NI.GetId()] = 1;
 	}
 
-	// 找triangle-connected
 	auto maxTCKTruss = GetMaxTCKTruss(maxKTruss);
 	WeightEdgeMap edgeWeightMap;
 	vector<Edge> pairs;
@@ -1366,14 +1275,12 @@ ResultMap MaxMinWeightTruss::VACQuery(int k, vector<int>& queryAttrs)
 	for (auto weight_edges = edgeWeightMap.begin(); weight_edges != edgeWeightMap.end();)
 	{
 		Weight weight = weight_edges->first;
-		// 把edgeWeightMap中的点对按权值大小顺序转移到pairs里，并在原来的map中删掉它
 		pairs.insert(pairs.end(), weight_edges->second.begin(), weight_edges->second.end());
 		weightIndex.push_back(make_pair(weight, weight_edges->second.size()));
 		edgeWeightMap.erase(weight_edges++);
 	}
 	WeightEdgeMap().swap(edgeWeightMap);
 
-	// 对pairs内的点对，按老方法找到符合要求的k-truss
 	DynamicClique* dynamicClique = new DynamicClique();
 	int pairLIndex = 0;
 	PUNGraph updateEdgeGraph = TUNGraph::New();
@@ -1381,7 +1288,7 @@ ResultMap MaxMinWeightTruss::VACQuery(int k, vector<int>& queryAttrs)
 	{
 		Weight weight = weight_cnt.first;
 		int cnt = weight_cnt.second;
-		// 构建图
+
 		for (int i = pairLIndex; i < pairLIndex + cnt; i++)
 		{
 			updateEdgeGraph->AddEdge2(pairs[i].first, pairs[i].second);
@@ -1390,7 +1297,7 @@ ResultMap MaxMinWeightTruss::VACQuery(int k, vector<int>& queryAttrs)
 		PUNGraph updateEdgeGraph1 = new TUNGraph(*updateEdgeGraph);
 
 		clock_t startTime = clock();
-		auto newCliques = dynamicClique->AddEdges_BInsert(updateEdgeGraph);
+		auto newCliques = dynamicClique->AddEdges_NIEMC(updateEdgeGraph);
 
 		vector<Clique> cliques;
 		vector<int> candIndexes, indexes;
@@ -1418,7 +1325,6 @@ ResultMap MaxMinWeightTruss::VACQuery(int k, vector<int>& queryAttrs)
 				{
 					if (clique.size() == newClique.size())
 					{
-						// 已经是maximal
 						results[weight].push_back(clique);
 						cliques.push_back(clique);
 					}
@@ -1446,7 +1352,6 @@ ResultMap MaxMinWeightTruss::VACQuery(int k, vector<int>& queryAttrs)
 			}
 		}
 
-		// 没有和本来就已经是maximal的进行判断
 		vector<pair<int, int>> sortedIndexes;
 		sortedIndexes.reserve(indexes.size());
 		for (auto index : indexes)
@@ -1481,7 +1386,7 @@ ResultMap MaxMinWeightTruss::VACQuery(int k, vector<int>& queryAttrs)
 
 				if (IsIn(clique, bigClique))
 				{
-					isMaximal = false; // 此时clique在bigClique中，证明clique不是一个maximal的k-truss
+					isMaximal = false; 
 					break;
 				}
 			}
@@ -1507,15 +1412,12 @@ ResultMap MaxMinWeightTruss::KCQuery(int k, vector<int>& queryAttrs)
 {
 	ResultMap results;
 
-	// 找maximal k-truss
 	maxKTruss->Clr();
 	GetMaxKTrussByIndex(k);
 
-	// 计算每个顶点与查询属性集的共同属性数
 	nodeComAttrCnt.clear();
 	ComputeComAttrCnt(queryAttrs);
 
-	// 过滤不含Query属性的顶点
 	vector<int> nodes;
 	nodes.reserve(maxKTruss->GetNodes());
 	for (auto& node_cnt : nodeComAttrCnt)
@@ -1573,7 +1475,7 @@ ResultMap MaxMinWeightTruss::KCQuery(int k, vector<int>& queryAttrs)
 		for (auto NI = G1->BegNI(); NI != G1->EndNI(); NI++)
 		{
 			int dist = KCQuery_GetKDistU(G1, NI.GetId(), queryAttrs);
-			kDistMap[NI.GetId()] = dist; // maintain距离
+			kDistMap[NI.GetId()] = dist; 
 			if (dist > d1)
 			{
 				d1 = dist;
@@ -1609,7 +1511,7 @@ int MaxMinWeightTruss::KCQuery_GetKDistU(PUNGraph G, int u, vector<int>& queryAt
 		queryAttrsH.emplace(attr);
 	}
 
-	queue<pair<int, int>> Q; // 保存的是<顶点，距离>
+	queue<pair<int, int>> Q; // <node, distance>
 	flat_hash_set<int> visited;
 	Q.push(make_pair(u, 0));
 	visited.emplace(u);
@@ -1683,284 +1585,4 @@ double MaxMinWeightTruss::ComputeKwdC(Clique& queryAttrs, Clique& candCom)
 		}
 	}
 	return d;
-}
-
-// average of |Q ∩ A(u)|
-double MaxMinWeightTruss::ComputeScore1(Clique& queryAttrs, Clique& candCom)
-{
-	sort(queryAttrs.begin(), queryAttrs.end());
-	int totalAttrs = 0;
-	for (auto node : candCom)
-	{
-		auto& attrs = attrsOfNode[node];
-		Counter c;
-		set_intersection(queryAttrs.begin(), queryAttrs.end(), attrs.begin(), attrs.end(), back_inserter(c));
-		totalAttrs += c.count;
-	}
-	return (double)totalAttrs / candCom.size();
-}
-
-// our score
-double MaxMinWeightTruss::ComputeScore2(Clique& queryAttrs, Clique& candCom)
-{
-	nodeComAttrCnt.clear();
-	for (auto node : candCom)
-	{
-		auto& attrs = attrsOfNode[node];
-		Counter c;
-		set_intersection(queryAttrs.begin(), queryAttrs.end(), attrs.begin(), attrs.end(), back_inserter(c));
-		nodeComAttrCnt[node] = c.count;
-	}
-	
-	Weight minWeight = Weight(2 * queryAttrs.size(), 1);
-	auto& nodes = candCom;
-	flat_hash_set<Attribute> nodeAttrs;
-	int nodeCnt = nodes.size();
-	for (int i = 0; i < nodeCnt; i++)
-	{
-		int u = nodes[i];
-		int uComAttrCnt = nodeComAttrCnt[u];
-		nodeAttrs.insert(attrsOfNode[u].begin(), attrsOfNode[u].end());
-		for (int j = i + 1; j < nodeCnt; j++)
-		{
-			int v = nodes[j];
-			// 算点对与Query共享的属性个数和
-			int comAttrCnt = uComAttrCnt + nodeComAttrCnt[v];
-			// 算点对的Jaccard Similarity
-			Weight sim = ComputeEdgeSim(nodeAttrs, v);
-			Weight weight = sim * comAttrCnt;
-			if (weight < minWeight)
-			{
-				minWeight = weight;
-			}
-		}
-		nodeAttrs.clear();
-	}
-	return (double)minWeight.numerator / minWeight.denominator;
-}
-
-// 
-double MaxMinWeightTruss::ComputeScore3(Clique& queryAttrs, Clique& candCom)
-{
-	double totalScore = 0;
-	int nodeCnt = candCom.size();
-	for (int i = 0; i < nodeCnt; i++)
-	{
-		int u = candCom[i];
-		auto& uAttrs = attrsOfNode.at(u);
-		for (int j = i + 1; j < nodeCnt; j++)
-		{
-			int v = candCom[j];
-			auto& vAttrs = attrsOfNode.at(v);
-			Clique comAttrs;
-			set_intersection(uAttrs.begin(), uAttrs.end(), vAttrs.begin(), vAttrs.end(), back_inserter(comAttrs));
-			Counter c1;
-			set_intersection(queryAttrs.begin(), queryAttrs.end(), comAttrs.begin(), comAttrs.end(), back_inserter(c1));
-			double score = (double)c1.count / (queryAttrs.size() + comAttrs.size() - c1.count);
-			totalScore += score;
-		}
-	}
-	return ((double)totalScore / (nodeCnt * (nodeCnt - 1) / 2));
-}
-
-double MaxMinWeightTruss::ComputeScore4(Clique& queryAttrs, Clique& candCom)
-{
-	sort(queryAttrs.begin(), queryAttrs.end());
-	double totalScore = 0;
-	for (auto node : candCom)
-	{
-		auto& attrs = attrsOfNode[node];
-		Counter c;
-		set_intersection(queryAttrs.begin(), queryAttrs.end(), attrs.begin(), attrs.end(), back_inserter(c));
-		double score = (double)c.count / (queryAttrs.size() + attrs.size() - c.count);
-		totalScore += score;
-	}
-	return totalScore / candCom.size();
-}
-
-double MaxMinWeightTruss::ComputeACSF(Clique& queryAttrs, Clique& candCom)
-{
-	sort(queryAttrs.begin(), queryAttrs.end());
-
-	// 计算AttriScore
-	double attriScore = 1;
-	for (auto w : queryAttrs)
-	{
-		auto& wNodes = nodesInAttr.at(w);
-		Counter c;
-		set_intersection(wNodes.begin(), wNodes.end(), candCom.begin(), candCom.end(), back_inserter(c));
-		int count = c.count;
-		attriScore += count;
-	}
-	attriScore = (double)attriScore / candCom.size();
-
-	return attriScore;
-}
-
-double MaxMinWeightTruss::ComputeECOQUG(Clique& candCom)
-{
-	sort(candCom.begin(), candCom.end());
-	PUNGraph candComGraph = GetSubGraph(G, candCom);
-	int nodeCnt = candComGraph->GetNodes(), edgeCnt = candComGraph->GetEdges();
-	int degSqSum = 0;
-	double odfSum = 0;
-	for (auto NI = candComGraph->BegNI(); NI != candComGraph->EndNI(); NI++)
-	{
-		int node = NI.GetId(), deg = NI.GetDeg();
-		int degG = G->GetNI(node).GetDeg();
-		degSqSum += (deg * deg);
-		odfSum += ((double)(degG - deg) / degG);
-	}
-	// double inner = 2.0 * edgeCnt / nodeCnt + (double)degSqSum / (nodeCnt * (nodeCnt - 1));
-	double inner = (double)(2 * edgeCnt) / (nodeCnt * (nodeCnt - 1));
-	double _odf = 1 - odfSum / nodeCnt;
-	return inner * _odf;
-	// return inner;
-}
-
-double MaxMinWeightTruss::ComputeCSS(Clique& candCom)
-{
-	double totalScore = 0;
-	int nodeCnt = candCom.size();
-	for (int i = 0; i < nodeCnt; i++)
-	{
-		int u = candCom[i];
-
-		Clique uNbrs;
-		auto uI = G->GetNI(u);
-		int uDeg = uI.GetDeg();
-		uNbrs.reserve(uDeg);
-		for (int i = 0; i < uDeg; i++)
-		{
-			uNbrs.push_back(uI.GetNbrNId(i));
-		}
-
-		for (int j = i + 1; j < nodeCnt; j++)
-		{
-			int v = candCom[j];
-
-			Clique vNbrs;
-			auto vI = G->GetNI(v);
-			int vDeg = vI.GetDeg();
-			vNbrs.reserve(vDeg);
-			for (int i = 0; i < vDeg; i++)
-			{
-				vNbrs.push_back(vI.GetNbrNId(i));
-			}
-
-			Counter c1;
-			set_intersection(uNbrs.begin(), uNbrs.end(), vNbrs.begin(), vNbrs.end(), back_inserter(c1));
-			double score = (double)c1.count / (uNbrs.size() + vNbrs.size() - c1.count);
-			totalScore += score;
-		}
-	}
-	return ((double)totalScore / (nodeCnt * (nodeCnt - 1) / 2));
-}
-
-double MaxMinWeightTruss::ComputeCAS(Clique& candCom)
-{
-	double totalScore = 0;
-	int nodeCnt = candCom.size();
-	for (int i = 0; i < nodeCnt; i++)
-	{
-		int u = candCom[i];
-		auto& uAttrs = attrsOfNode.at(u);
-		for (int j = i + 1; j < nodeCnt; j++)
-		{
-			int v = candCom[j];
-			auto& vAttrs = attrsOfNode.at(v);
-			Counter c1;
-			set_intersection(uAttrs.begin(), uAttrs.end(), vAttrs.begin(), vAttrs.end(), back_inserter(c1));
-			double score = (double)c1.count / (uAttrs.size() + vAttrs.size() - c1.count);
-			totalScore += score;
-		}
-	}
-	return ((double)totalScore / (nodeCnt * (nodeCnt - 1) / 2));
-}
-
-double MaxMinWeightTruss::ComputeASCore(Clique& candCom)
-{
-	double maxDis = 0;
-	int nodeCnt = candCom.size();
-	for (int i = 0; i < nodeCnt; i++)
-	{
-		int u = candCom[i];
-		auto& uAttrs = attrsOfNode.at(u);
-		for (int j = i + 1; j < nodeCnt; j++)
-		{
-			int v = candCom[j];
-			auto& vAttrs = attrsOfNode.at(v);
-			Counter c1;
-			set_intersection(uAttrs.begin(), uAttrs.end(), vAttrs.begin(), vAttrs.end(), back_inserter(c1));
-			double score = (double)c1.count / (uAttrs.size() + vAttrs.size() - c1.count);
-			double dis = 1 - score;
-			if (dis > maxDis)
-			{
-				maxDis = dis;
-			}
-		}
-	}
-	return maxDis;
-}
-
-double MaxMinWeightTruss::ComputeDensity(Clique& candCom)
-{
-	sort(candCom.begin(), candCom.end());
-	PUNGraph graph = GetSubGraph(G, candCom);
-	int nodeCnt = graph->GetNodes(), edgeCnt = graph->GetEdges();
-	return (double)(2 * edgeCnt) / (nodeCnt * (nodeCnt - 1));
-}
-
-double MaxMinWeightTruss::ComputeConDensity(Clique& queryAttrs, Clique& candCom)
-{
-	sort(candCom.begin(), candCom.end());
-	PUNGraph graph = GetSubGraph(G, candCom);
-
-	nodeComAttrCnt.clear();
-	for (auto node : candCom)
-	{
-		auto& attrs = attrsOfNode[node];
-		Counter c;
-		set_intersection(queryAttrs.begin(), queryAttrs.end(), attrs.begin(), attrs.end(), back_inserter(c));
-		nodeComAttrCnt[node] = c.count;
-	}
-
-	long long numerator = 0;
-	flat_hash_map<int, Clique> nbrMap;
-	nbrMap.reserve(graph->GetNodes());
-	for (TUNGraph::TNodeI NI = graph->BegNI(); NI != graph->EndNI(); NI++)
-	{
-		int u = NI.GetId(), uDeg = NI.GetDeg();
-		Clique uNbrs;
-		uNbrs.resize(uDeg);
-		for (int i = 0; i < uDeg; i++)
-		{
-			uNbrs[i] = NI.GetNbrNId(i);
-		}
-		nbrMap.emplace(u, std::move(uNbrs));
-	}
-
-	for (TUNGraph::TEdgeI EI = graph->BegEI(); EI != graph->EndEI(); EI++)
-	{
-		int u = EI.GetSrcNId(), v = EI.GetDstNId();
-		auto& uNbrs = nbrMap[u];
-		auto& vNbrs = nbrMap[v];
-		Clique comNbrs;
-		comNbrs.reserve(MIN(uNbrs.size(), vNbrs.size()));
-		set_intersection(uNbrs.begin(), uNbrs.end(), vNbrs.begin(), vNbrs.end(), back_inserter(comNbrs));
-		for (auto& w : comNbrs)
-		{
-			if (w > u && w > v)
-			{
-				int uvES = nodeComAttrCnt[u] + nodeComAttrCnt[v], vwES = nodeComAttrCnt[v] + nodeComAttrCnt[w], wuES = nodeComAttrCnt[w] + nodeComAttrCnt[u];
-				numerator += (uvES + vwES + wuES);
-				// numerator += GetTSOfTriangle(ESOfEdge, Triangle(u, v, w));
-			}
-		}
-		// numerator += ESOfEdge[GetEdge(u, v)];
-		int uvES = nodeComAttrCnt[u] + nodeComAttrCnt[v];
-		numerator += uvES;
-	}
-
-	return (double)numerator / candCom.size();
 }

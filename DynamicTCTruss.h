@@ -2,6 +2,7 @@
 
 #include "Common.h"
 
+// dynamically computation of triangle-connected k-truss after edge insertion
 class DynamicTCTruss
 {
 private:

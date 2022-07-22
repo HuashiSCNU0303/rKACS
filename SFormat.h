@@ -1,5 +1,4 @@
-// 偷了个实现，https://github.com/mmc1993/sformat
-// 不知道服务器支不支持C++ 20，我懒得改了，就这样了
+// format string implementation from https://github.com/mmc1993/sformat
 
 #pragma once
 

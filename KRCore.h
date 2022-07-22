@@ -2,6 +2,7 @@
 
 // the (k, r)-core implementation, 
 // slightly modified based on the implementation of Fan Zhang
+// https://github.com/fanzhangcs/krCoreEnum/
 
 #include "Def.h"
 

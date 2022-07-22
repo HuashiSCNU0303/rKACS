@@ -33,21 +33,11 @@ void InsertNode(Clique& clique, int node)
 		clique.push_back(node);
 		return;
 	}
-	/*int binTime = ceil(log2(size));
-	if (clique[binTime] < node)
-	{
-		BinInsertNode(clique, node);
-	}
-	else
-	{
-		SeqInsertNode(clique, node);
-	}*/
 	BinInsertNode(clique, node);
 }
 
 void SeqInsertNode(Clique& clique, int node)
 {
-	// 遍历插入
 	int size = clique.size();
 	for (int i = 0; i < size; i++)
 	{
@@ -62,7 +52,6 @@ void SeqInsertNode(Clique& clique, int node)
 
 void BinInsertNode(Clique& clique, int node)
 {
-	// 二分插入
 	int a = 0, b = clique.size() - 1;
 	if (b >= 0 && clique[b] < node)
 	{
@@ -75,19 +64,16 @@ void BinInsertNode(Clique& clique, int node)
 		int mid = (a + b) / 2;
 		if (clique[mid] >= node)
 		{
-			// 在mid左边找
 			b = mid;
 		}
 		else
 		{
-			// 在mid右边找
 			a = mid + 1;
 		}
 	}
 	clique.insert(clique.begin() + a, node);
 }
 
-// 在有序集合clique中查找顶点
 int SearchNode(const Clique& clique, int node)
 {
 	int size = clique.size();
@@ -119,7 +105,6 @@ int BinSearchNode(const Clique& clique, int node, int left, int right)
 	}
 }
 
-// 在有序集合clique中删除顶点
 bool DeleteNode(Clique& clique, int node)
 {
 	int index = SearchNode(clique, node);
@@ -243,7 +228,7 @@ bool MaxEval(const Clique& cand, vector<int>& E, PUNGraph G)
 			}
 			if (IsIn(cand, uNbrs))
 			{
-				return false; // 此时cand在N(u)中，证明cand∪{u}是一个更大的clique，即cand不是maximal
+				return false; 
 			}
 		}
 	}
@@ -288,7 +273,7 @@ bool MaxEval(const Clique& cand, vector<int>& E, flat_hash_map<int, Clique>& nod
 		{
 			if (IsIn(cand, uNbrs))
 			{
-				return false; // 此时cand在N(u)中，证明cand∪{u}是一个更大的clique，即cand不是maximal
+				return false; 
 			}
 		}
 	}
@@ -315,7 +300,7 @@ bool MaxEval(const Clique& cand, flat_hash_set<int>& E, flat_hash_map<int, Cliqu
 			{
 				if (IsIn(cand, uNbrs))
 				{
-					return false; // 此时cand在N(u)中，证明cand∪{u}是一个更大的clique，即cand不是maximal
+					return false; 
 				}
 			}
 		}
@@ -345,24 +330,6 @@ pair<int, int> GetMinDegNode(flat_hash_map<int, Clique>& nodeInfo, const Clique&
 		}
 	}
 	return make_pair(minDegNode, minDeg);
-}
-
-void GetNonAscDeg(PUNGraph G, flat_hash_map<int, int>& deg, set<pair<int, int>, greater<pair<int, int>>>& nonAscDeg)
-{
-	for (TUNGraph::TNodeI NI = G->BegNI(); NI != G->EndNI(); NI++)
-	{
-		int degOfNode = NI.GetDeg(), node = NI.GetId();
-		nonAscDeg.insert(make_pair(degOfNode, node));
-		deg[node] = degOfNode;
-	}
-}
-
-void MaintainDeg_DelNode(flat_hash_map<int, int>& deg, set<pair<int, int>, greater<pair<int, int>>>& nonAscDeg, int node)
-{
-	int& d = deg.at(node);
-	nonAscDeg.erase(make_pair(d, node));
-	d--;
-	nonAscDeg.insert(make_pair(d, node));
 }
 
 void GetNonAscDeg(PUNGraph G, flat_hash_map<int, pair<int, int>>& deg, vector<Clique>& nonAscDeg)
@@ -408,23 +375,6 @@ void MaintainDeg_DelNode(flat_hash_map<int, pair<int, int>>& deg, vector<Clique>
 	deg_index.second = nonAscDeg[d].size() - 1;
 }
 
-pair<int, int> GetMaxDegNode(vector<Clique>& nonAscDeg)
-{
-	for (int i = nonAscDeg.size() - 1; i >= 0; i--)
-	{
-		auto& nodes = nonAscDeg[i];
-		while (!nodes.empty())
-		{
-			int u = nodes.back();
-			nodes.pop_back();
-			if (u != -1)
-			{
-				return make_pair(i, u);
-			}
-		}
-	}
-}
-
 void GetNonAscDeg(PUNGraph G, vector<pair<int, int>>& deg)
 {
 	int nodeCnt = G->GetNodes();
@@ -443,7 +393,6 @@ PUNGraph GetSubGraph(PUNGraph graph, Clique& nodes)
 	{
 		return TUNGraph::New();
 	}
-	// 借用了一下SNAP里的实现，稍微优化了下
 	PUNGraph NewGraphPt = TUNGraph::New();
 	TUNGraph& NewGraph = *NewGraphPt;
 	int nodeCnt = nodes.size(), maxNId = nodes.back();
@@ -466,7 +415,6 @@ PUNGraph GetSubGraph(PUNGraph graph, Clique& nodes)
 	{
 		const TUNGraph::TNodeI NI = graph->GetNI(n);
 		int nDeg = NI.GetDeg();
-		// NewGraph.ReserveNIdDeg(n, nDeg); // 很迷，先预留空间了反而更慢
 		for (int edge = 0; edge < nDeg; edge++) 
 		{
 			const int nbr = NI.GetNbrNId(edge);
@@ -504,7 +452,6 @@ flat_hash_map<int, Clique>& GetSubGraph1(PUNGraph graph, Clique& nodes, flat_has
 	{
 		const TUNGraph::TNodeI NI = graph->GetNI(n);
 		int nDeg = NI.GetDeg();
-		// auto& nbrs = subgraph[n];
 		vector<int> nbrs;
 		nbrs.reserve(nDeg);
 		for (int edge = 0; edge < nDeg; edge++)
@@ -525,17 +472,15 @@ flat_hash_map<int, Clique>& GetSubGraph1(PUNGraph graph, Clique& nodes, flat_has
 	return subgraph;
 }
 
-// 同一个level只使用一个candIndexes
 void RemoveReplicas(const vector<Clique>& cliques, vector<int>& candIndexes, int candBegin, int candEnd,
 					 int level, int size, vector<int>& cliqueIndexes)
 {
 	if (level >= size)
 	{
-		// 有重复的，candIndexes里只认第一个，其他的都是重复的
 		for (int i = candBegin + 1; i < candEnd + 1; i++)
 		{
 			int index = candIndexes[i];
-			cliqueIndexes[index] = -1; // 删除
+			cliqueIndexes[index] = -1; 
 		}
 		return;
 	}
@@ -551,8 +496,6 @@ void RemoveReplicas(const vector<Clique>& cliques, vector<int>& candIndexes, int
 		return cliques[i1][level] < cliques[i2][level];
 	});
 
-	// 0 0 1 1 1 2
-	// 
 	int left = 0, indexCnt = indexes.size();
 	for (int i = 0; i < indexCnt; i++)
 	{
@@ -570,7 +513,6 @@ void RemoveReplicas(const vector<Clique>& cliques, vector<int>& candIndexes, int
 		}
 	}
 
-	// 处理最后一个区间
 	if (left < indexCnt - 1)
 	{
 		RemoveReplicas(cliques, indexes, left, indexCnt - 1, level + 1, size, cliqueIndexes);

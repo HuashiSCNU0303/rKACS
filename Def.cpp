@@ -57,14 +57,13 @@ uint64_t MurmurHash2(const vector<int>& data)
     const uint64_t m = 0xc6a4a7935bd1e995;
     const int r = 47;
 
-    int size = data.size(), len = size * 4; // len是byte
+    int size = data.size(), len = size * 4;
 
     uint64_t h = 0 ^ (len * m);
 
     int i = 0;
     for (; i < size - 1; i += 2)
     {
-        // i和i+1
         int_combine newInt(data[i], data[i + 1]);
         uint64_t k = *((uint64_t*)(&newInt));
 
@@ -76,7 +75,6 @@ uint64_t MurmurHash2(const vector<int>& data)
         h *= m;
     }
 
-    // 把末尾的4个byte组合
     if (i == size - 1)
     {
         int num = data[size - 1];
