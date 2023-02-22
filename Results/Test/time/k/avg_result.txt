@@ -1,0 +1,7 @@
+k = 6 :
+Incremental, avg time = 0.168298s
+k = 5 :
+Incremental, avg time = 0.285182s
+k = 4 :
+Incremental, avg time = 0.479594s
+————————————

@@ -1,0 +1,7 @@
+attrCnt = 5 :
+Incremental, avg time = 0.209931s
+attrCnt = 7 :
+Incremental, avg time = 0.232661s
+attrCnt = 9 :
+Incremental, avg time = 0.259155s
+————————————

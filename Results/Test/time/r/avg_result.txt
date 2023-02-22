@@ -1,0 +1,7 @@
+r = 1 :
+Incremental, avg time = 0.239915s
+r = 5 :
+Incremental, avg time = 0.253014s
+r = 10 :
+Incremental, avg time = 0.269668s
+————————————
